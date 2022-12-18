@@ -5,10 +5,25 @@ from pathlib import Path
 import pandas as pd
 import os
 from tqdm import tqdm
+import re
 
-from constants import ROOT
+from code.constants import ROOT
 
 PIL.Image.MAX_IMAGE_PIXELS = 339738624
+
+# from index.html file
+CONFIG = {
+    'id': '6126758101',
+    'folder': 'IMG_PHR1B_PMS-N_001',
+    'prefix': 'IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_',
+    'extension': 'TIF',
+    'coordinates': {
+        'R1C1': (-95.41759381264909, 33.50642345814874),
+        'R1C2': (-95.22180129867475, 33.51009141565303),
+        'R2C1': (-95.21864991285545, 33.38646550386663),
+        'R2C2': (-95.41416534766181, 33.38281461688832)
+    }
+}
 
 
 def find_new_coordinates(
@@ -48,8 +63,6 @@ class BigImage(object):
     """
 
     Args:
-        project_name (str): Like '6126758101'
-        solar_farm_name(str): like 'IMG_PHR1B_PMS-N_001'
         tag (str): like 'R2C2'
         image_filename = 'IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_' + tag + '.TIF'
 
@@ -59,23 +72,22 @@ class BigImage(object):
         tag: 'R1C1' for example.
 
     """
-
-    # from index.html file
-    COORDINATES = {'R1C1': (-95.41759381264909, 33.50642345814874),
-                   'R1C2': (-95.22180129867475, 33.51009141565303),
-                   'R2C1': (-95.21864991285545, 33.38646550386663),
-                   'R2C2': (-95.41416534766181, 33.38281461688832)}
-
-    def __init__(self, project_name, solar_farm_name, tag, image_filename):
-        self.project_name = project_name
-        self.solar_farm_name = solar_farm_name
+    def __init__(self, tag, config=CONFIG):
+        self.id = config['id']
+        self.folder = config['folder']
         self.tag = tag
-        self.image_filename = image_filename
-        self.coordinates = self.COORDINATES[tag]
+        self.image_dirname = Path(ROOT) / 'data' / self.id / self.folder
+        self.image_filename = f"{config['prefix']}{tag}.{config['extension']}"
+        self.coordinates = config['coordinates'][tag]
 
-        self.image_pathname = Path(ROOT) / 'data' / project_name / solar_farm_name / image_filename
-        self.cropped_folder = Path(ROOT) / 'data' / project_name / solar_farm_name / (tag + '_cropped')
+        self.image_pathname = self.image_dirname/ self.image_filename
+        self.cropped_folder = self.image_dirname / 'cropped'
         self.cropped_info_file = self.cropped_folder.parent / (tag + '_cropped_images_info.csv')
+
+    @property
+    def size(self):
+        with Image.open(self.image_pathname) as im:
+            return im.size
 
     def _crop_and_write(self,
             img: Image,
@@ -145,54 +157,52 @@ class BigImage(object):
         """
         with Image.open(self.image_pathname) as img:
             start_long, start_lat = self.coordinates
-            df = self._crop_and_write(img, self.cropped_folder / , start_lat, start_long, prefix=tag)
+            df = self._crop_and_write(img, self.cropped_folder, start_lat, start_long, prefix=self.tag)
             df.to_csv(self.cropped_info_file)
         print('Done cropping')
 
-    def stitch_images(self,
-                      image_pathname: Path,
-                      info_file_pathname: Path,
-                      dir_name: Path,
-                      output_image_pathname: Path
-    ):
+    def stitch_images(self, cropped_images_folder, output_path: Path = None):
+        """
+        Find all images with a self.tag in the folder, extracts row and col and stitches them.
         """
 
-        Args:
-            image_pathname:
-            info_file_pathname:
-            dir_name:
-            output_image_pathname:
+        print('Expect 1-2 minutes ...')
+        if output_path is None:
+            output_path = self.image_dirname / (self.tag + '.png')
 
-        Returns:
+        if not isinstance(cropped_images_folder, Path):
+            cropped_images_folder = Path(cropped_images_folder)
 
-        """
-
-        im = Image.open(image_pathname)
-        nimg = Image.new('RGB', im.size)
-
-        df = pd.read_csv(info_file_pathname)
+        stitched_image = Image.new('RGB', self.size)
+        df = pd.read_csv(self.cropped_info_file)
         single_height = df['x_pixels'].iloc[0]
         single_width = df['y_pixels'].iloc[0]
 
-        for row in tqdm(df.iterrows()):
-            row = row[1]  # this gets only relevant info
+        for cropped_image_path in tqdm(cropped_images_folder.glob(f'*{self.tag}*.png')):
+            # extract row and column from the name:
+            m = re.match(r".*row(\d+)_col(\d+).*.png", str(cropped_image_path))
+            row = int(m.group(1))
+            col = int(m.group(2))
+
             # open an image and paste it into the corresponding place
-            image_name, image_row, image_col = row['img_name'], row['grid_row'], row['grid_col']
-            with Image.open(os.path.join(dir_name, image_name + '.png')) as im:
-                nimg.paste(im, (single_width * image_col, single_height * image_row))
+            with Image.open(cropped_image_path) as im:
+                stitched_image.paste(im, (single_width * col, single_height * row))
 
-        nimg.save(output_image_pathname)
+        stitched_image.save(output_path)
+        print(f'Done stitching to: {output_path}')
 
+
+def crop_4_images():
+    for tag in ['R1C1', 'R1C2', 'R2C1', 'R2C2']:
+        big_image = BigImage(tag)
+        big_image.crop_large_image()
+
+
+def stitch_images():
+    # stitch back images
+    big_image = BigImage('R1C2')
+    big_image.stitch_images(big_image.image_dirname / 'cropped')
 
 
 if __name__ == '__main__':
-
-    project_name = '6126758101'
-    solar_farm_name = 'IMG_PHR1B_PMS-N_001'
-    for tag in ['R1C2', 'R2C1', 'R2C2']:
-        image_filename = 'IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_' + tag + '.TIF'
-        big_image = BigImage(project_name, solar_farm_name, tag, image_filename)
-        big_image.crop_large_image()
-
-# /Users/nenad.bozinovic/PycharmProjects/solar_panel/data/6126758101/raw/IMG_PHR1B_PMS-N_001/IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_R2C2.TIF')
-# /Users/nenad.bozinovic/PycharmProjects/solar_panel/data/6126758101/raw/IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_R2C2.TIF
+    pass
