@@ -57,8 +57,6 @@ def find_all_black(img: Image) -> float:
         return 0
 
 
-
-
 class BigImage(object):
     """
 
