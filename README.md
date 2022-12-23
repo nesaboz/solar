@@ -67,3 +67,5 @@ Project has several steps:
 - once happy with the model: freeze, deploy, evaluate all the images that exist
 - merge everything together into large satellite images that will be deliverable
 
+
+b/c we know that the pixel resolution from the satellite that took the photos is 50cm/pixel. The modules used on the Samson project are LONGi-LR4 and LONGi-LR6 which have about 40 inches (101.6 cm) 
