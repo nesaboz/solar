@@ -1,19 +1,14 @@
 import torch.nn as nn
 import torch
+import numpy as np
 
 
-def get_padding(input_size, kernel_size, stride):
+def get_padding(kernel_size, stride, width=256):
     """
-    Padding of ((output_size-1) * stride - input_size + kernel_size) // 2
-    is supposed to ensure output_size = ceil(input_size/stride)
-    (https://stackoverflow.com/questions/48491728/what-is-the-behavior-of-same-padding-when-stride-is-greater-than-1)
-    but I can't make it work. For now padding = (kernel_size - 1) // 2 does the trick.
+    Padding that ensures the output_size of ceil(input_size/stride). Assuming square images:
     """
-    #     input_size = block_input.shape[2]
-    #     output_size = int(np.ceil(input_size / stride))
-    #     padding = int(np.ceil(((output_size-1) * stride - input_size + kernel_size) // 2))
-
-    padding = (kernel_size - 1) // 2
+    output_width = np.ceil(width / stride)
+    padding = int(np.ceil(((output_width-1) * stride - width + kernel_size) / 2))
     return padding
 
 
@@ -29,7 +24,7 @@ class BaseModule(nn.Module):
 class Down(BaseModule):
     def __init__(self, in_channels, out_channels, kernel_size, stride):
         super().__init__()
-        padding = get_padding(in_channels, kernel_size, stride)
+        padding = get_padding(kernel_size, stride)
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels),
@@ -40,7 +35,7 @@ class Down(BaseModule):
 class DownNoActivation(BaseModule):
     def __init__(self, in_channels, out_channels, kernel_size, stride):
         super().__init__()
-        padding = get_padding(in_channels, kernel_size, stride)
+        padding = get_padding(kernel_size, stride)
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels)
@@ -48,12 +43,13 @@ class DownNoActivation(BaseModule):
 
 
 class Up(BaseModule):
-    def __init__(self, input_size, output_size, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
         super().__init__()
-        padding = get_padding(input_size, kernel_size, stride)
+        padding = get_padding(kernel_size, stride)
+        output_padding = padding % 2  # unsure about the exact formula, but I do know that output_padding is a non-symetric padding of the output image that enables us to get an even size image
         self.model = nn.Sequential(
-            nn.ConvTranspose2d(input_size, output_size, kernel_size, stride, padding),
-            nn.BatchNorm2d(output_size)
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, output_padding),
+            nn.BatchNorm2d(out_channels)
         )
 
 
@@ -82,13 +78,13 @@ class ResBlock(BaseModule):
     def forward(self, x):
         trunk = self.double_down(x)
         branch = self.res_branch(x)
-        x = torch.cat([trunk, branch], 1)
+        x = torch.cat([trunk, branch], 1)  # this step doubles the number of channels
         x = self.elu(x)
         return x
 
 
 class Segnet(nn.Module):
-    def __init__(self, n_channels=3, n_classes=2):
+    def __init__(self, n_channels, n_classes):
         super().__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
@@ -96,19 +92,19 @@ class Segnet(nn.Module):
         self.down_1 = Down(n_channels, 32, 5, 2)
         self.res_block_1 = ResBlock(32, 32, 3, 1)
 
-        self.down_2 = Down(32, 64, 5, 2)
+        self.down_2 = Down(64, 64, 5, 2)
         self.res_block_2 = ResBlock(64, 64, 3, 1)
 
-        self.down_3 = Down(64, 128, 5, 2)
+        self.down_3 = Down(128, 128, 5, 2)
         self.res_block_3 = ResBlock(128, 128, 3, 1)
 
-        self.up_1 = Up(128, 64, 5, 2)
+        self.up_1 = Up(256, 64, 5, 2)
         self.elu_1 = nn.ELU()
 
-        self.up_2 = Up(64, 32, 5, 2)
+        self.up_2 = Up(192, 32, 5, 2)
         self.elu_2 = nn.ELU()
 
-        self.final_conv = nn.ConvTranspose2d(32, self.n_classes, 5, 2)
+        self.final_conv = nn.ConvTranspose2d(96, self.n_classes, 5, 2, 2, 1)
 
     def forward(self, x):
         x = self.down_1(x)
@@ -131,8 +127,6 @@ class Segnet(nn.Module):
         x = self.final_conv(x)
         return x
 
-
-segnet = Segnet()
 
 
 # import tensorflow as tf
