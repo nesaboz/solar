@@ -85,7 +85,7 @@ class StepByStep(object):
         batch_y = batch_y.to(self.device)
 
         predictions = self.model(batch_x)
-        loss = self.loss_fn(predictions, batch_y)
+        loss = self.loss_fn(predictions, batch_y)  # order is critical ofcourse, first are predictions then true labels.
         loss.backward()
 
         self.optimizer.step()
@@ -154,6 +154,16 @@ class StepByStep(object):
                                         global_step=epoch)
 
     def predict(self, x):
+        """
+        Passes x though the model to get predictions.
+
+        Args:
+            x:
+
+        Returns: self.model(x)
+
+        """
+
         self.model.eval()
         # need to evaluate
         prediction = self.model(torch.as_tensor(x).float().to(self.device))

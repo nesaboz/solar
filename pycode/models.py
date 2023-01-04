@@ -22,9 +22,8 @@ class BaseModule(nn.Module):
 
 
 class Down(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super().__init__()
-        padding = get_padding(kernel_size, stride)
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels),
@@ -33,9 +32,8 @@ class Down(BaseModule):
 
 
 class DownNoActivation(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super().__init__()
-        padding = get_padding(kernel_size, stride)
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels)
@@ -43,10 +41,8 @@ class DownNoActivation(BaseModule):
 
 
 class Up(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding):
         super().__init__()
-        padding = get_padding(kernel_size, stride)
-        output_padding = padding % 2  # unsure about the exact formula, but I do know that output_padding is a non-symetric padding of the output image that enables us to get an even size image
         self.model = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, output_padding),
             nn.BatchNorm2d(out_channels)
@@ -54,25 +50,25 @@ class Up(BaseModule):
 
 
 class DoubleDown(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super().__init__()
         self.model = nn.Sequential(
-            Down(in_channels, out_channels, kernel_size, stride),
-            DownNoActivation(out_channels, out_channels, kernel_size, stride)
+            Down(in_channels, out_channels, kernel_size, stride, padding),
+            DownNoActivation(out_channels, out_channels, kernel_size, stride, padding)
         )
 
 
 class ResBranch(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super().__init__()
-        self.model = DownNoActivation(in_channels, out_channels, kernel_size, stride)
+        self.model = DownNoActivation(in_channels, out_channels, kernel_size, stride, padding)
 
 
 class ResBlock(BaseModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super().__init__()
-        self.double_down = DoubleDown(in_channels, out_channels, kernel_size, stride)
-        self.res_branch = ResBranch(in_channels, out_channels, 1, stride)
+        self.double_down = DoubleDown(in_channels, out_channels, kernel_size, stride, padding)
+        self.res_branch = ResBranch(in_channels, out_channels, 1, stride, 0)
         self.elu = nn.ELU()
 
     def forward(self, x):
@@ -89,19 +85,19 @@ class Segnet(nn.Module):
         self.n_channels = n_channels
         self.n_classes = n_classes
 
-        self.down_1 = Down(n_channels, 32, 5, 2)
-        self.res_block_1 = ResBlock(32, 32, 3, 1)
+        self.down_1 = Down(n_channels, 32, 5, 2, 2)
+        self.res_block_1 = ResBlock(32, 32, 3, 1, 1)
 
-        self.down_2 = Down(64, 64, 5, 2)
-        self.res_block_2 = ResBlock(64, 64, 3, 1)
+        self.down_2 = Down(64, 64, 5, 2, 2)
+        self.res_block_2 = ResBlock(64, 64, 3, 1, 1)
 
-        self.down_3 = Down(128, 128, 5, 2)
-        self.res_block_3 = ResBlock(128, 128, 3, 1)
+        self.down_3 = Down(128, 128, 5, 2, 2)
+        self.res_block_3 = ResBlock(128, 128, 3, 1, 1)
 
-        self.up_1 = Up(256, 64, 5, 2)
+        self.up_1 = Up(256, 64, 5, 2, 2, 1)
         self.elu_1 = nn.ELU()
 
-        self.up_2 = Up(192, 32, 5, 2)
+        self.up_2 = Up(192, 32, 5, 2, 2, 1)
         self.elu_2 = nn.ELU()
 
         self.final_conv = nn.ConvTranspose2d(96, self.n_classes, 5, 2, 2, 1)
@@ -127,6 +123,11 @@ class Segnet(nn.Module):
         x = self.final_conv(x)
         return x
 
+
+# def test_segnet():
+    # segnet = Segnet(n_channels=3, n_classes=2)
+    # x = torch.randn([32, 3, 256, 256])
+    # yhat = segnet(x)
 
 
 # import tensorflow as tf
