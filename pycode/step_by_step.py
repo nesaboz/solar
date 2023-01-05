@@ -196,6 +196,15 @@ class StepByStep(object):
         torch.save(checkpoint, filename)
 
     def load_checkpoint(self, filename):
+        """
+        From https://pytorch.org/tutorials/beginner/saving_loading_models.html
+        "To load the items, first initialize the model and optimizer, then load the dictionary locally using torch.load().
+        From here, you can easily access the saved items by simply querying the dictionary as you would expect."
+
+        Args:
+            filename:
+        """
+
         checkpoint = torch.load(filename)
 
         self.total_epochs = checkpoint['total_epochs']
