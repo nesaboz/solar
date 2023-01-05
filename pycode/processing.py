@@ -7,7 +7,7 @@ import os
 from tqdm import tqdm
 import re
 
-from code.constants import ROOT
+from pycode.constants import ROOT
 
 PIL.Image.MAX_IMAGE_PIXELS = 339738624
 
@@ -78,7 +78,7 @@ class BigImage(object):
         self.image_filename = f"{config['prefix']}{tag}.{config['extension']}"
         self.coordinates = config['coordinates'][tag]
 
-        self.image_pathname = self.image_dirname/ self.image_filename
+        self.image_pathname = self.image_dirname / self.image_filename
         self.cropped_folder = self.image_dirname / 'cropped'
         self.cropped_info_file = self.cropped_folder.parent / (tag + '_cropped_images_info.csv')
 
@@ -88,13 +88,13 @@ class BigImage(object):
             return im.size
 
     def _crop_and_write(self,
-            img: Image,
-            img_dir: Path,
-            start_lat: float,
-            start_long: float,
-            prefix: str,
-            pixels: int = 256,
-    ) -> pd.DataFrame:
+                        img: Image,
+                        img_dir: Path,
+                        start_lat: float,
+                        start_long: float,
+                        prefix: str,
+                        pixels: int = 256,
+                        ) -> pd.DataFrame:
         columns = [
             'img_name',
             'left_bound',

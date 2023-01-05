@@ -153,7 +153,7 @@ class StepByStep(object):
                                         tag_scalar_dict=scalars,
                                         global_step=epoch)
 
-    def predict(self, x):
+    def predict(self, x, to_numpy=True):
         """
         Passes x though the model to get predictions.
 
@@ -168,7 +168,10 @@ class StepByStep(object):
         # need to evaluate
         prediction = self.model(torch.as_tensor(x).float().to(self.device))
         self.model.train()
-        return prediction.detach().cpu().numpy()
+        if to_numpy:
+            return prediction.detach().cpu().numpy()
+        else:
+            return prediction
 
     def plot_losses(self):
         fig = plt.figure(figsize=(10, 4))
@@ -238,7 +241,18 @@ class StepByStep(object):
 
     @staticmethod
     def loader_apply(loader, func, reduce='sum'):
-        results = [func(x, y) for i, (x, y) in enumerate(loader)]
+        """
+        Applies `func` to the loader, batch by batch.
+
+        Args:
+            loader:
+            func:
+            reduce:
+
+        Returns:
+
+        """
+        results = [func(x, y) for (x, y) in loader]
         results = torch.stack(results, axis=0)
 
         if reduce == 'sum':
@@ -450,6 +464,24 @@ class StepByStep(object):
 
     @staticmethod
     def statistics_per_channel(images, labels):
+        """
+        Application is toward DataLoaders, but could be ran on a Dataset as well (torch.unsqueeze adds a dimension).
+
+        Args:
+            images (Tensor):
+            labels (Tensor):
+
+        Returns:
+            Tensor: Size (3, n_channels): [n_samples, sum_means, sum_stds] for example:
+                    tensor([[32.0000, 32.0000, 32.0000],
+                            [ 6.9379,  7.4181,  6.9894],
+                            [ 3.9893,  3.9119,  3.6910]])
+
+        """
+        if len(images.shape) < 4:
+            # this means there is only one image so n_samples = 1
+            images = torch.unsqueeze(images, 0)
+
         # NCHW
         n_samples, n_channels, n_height, n_weight = images.size()
         # Flatten HW into a single dimension
@@ -477,6 +509,21 @@ class StepByStep(object):
 
     @staticmethod
     def make_normalizer(loader):
+        """
+        Applies statistics_per_channel on a loader that looks for example like this:
+                (tensor([6555., 6555., 6555.]),
+                 tensor([2109.7141, 2051.4712, 1769.3362]),
+                 tensor([541.4397, 492.6389, 484.5458]))
+        to get a normalizer.
+
+        Args:
+            loader:
+
+        Returns:
+            Normalizer
+
+        """
+
         total_samples, total_means, total_stds = StepByStep.loader_apply(loader, StepByStep.statistics_per_channel)
         norm_mean = total_means / total_samples
         norm_std = total_stds / total_samples
@@ -724,3 +771,36 @@ def compare_optimizers(model, loss_fn, optimizers, train_loader, val_loader=None
                                'lrs': lrs}})
 
     return results
+
+
+class InverseNormalize(Normalize):
+    """
+    Undoes the normalization and returns the reconstructed images in the input domain.
+    """
+
+    def __init__(self, normalizer):
+        mean = normalizer.mean
+        std = normalizer.std
+        std_inv = 1 / (std + 1e-7)
+        mean_inv = -mean * std_inv
+        super().__init__(mean=mean_inv, std=std_inv)
+
+    def __call__(self, tensor):
+        return super().__call__(tensor.clone())
+
+
+def rescale(x):
+    """
+    Rescale tensor. Don't have use case yet.
+
+    Args:
+        x:
+
+    Returns:
+
+    """
+    rescaled_x = torch.clone(x)
+    for i in range(x.shape[0]):
+        rescaled_x[i,:,:] = rescaled_x[i,:,:] - rescaled_x[i,:,:].min()
+        rescaled_x[i,:,:] = rescaled_x[i,:,:] / rescaled_x[i,:,:].max()
+    return rescaled_x
