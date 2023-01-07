@@ -1,8 +1,9 @@
 import datetime
 import json
+import os
 from pathlib import Path
 from pathlib import PosixPath
-from typing import List
+from typing import List, Dict
 from typing import TypeVar
 import shutil
 
@@ -14,8 +15,7 @@ from PIL import Image
 
 MyImageType = TypeVar('MyImageType', str, Path, PIL.Image.Image, numpy.array)
 
-
-from pycode.constants import ROOT
+from constants import ROOT
 
 LABELS = Path(ROOT) / 'data/all_labels'
 
@@ -31,15 +31,16 @@ def load_image(im: MyImageType) -> numpy.array:
     return im
 
 
-def show_image(im: MyImageType, title: str = None) -> str:
+def show_image(im: MyImageType, title: str = None, prompt=True) -> str:
     """
     Load and show (or not) image using cv2. Couldn't find neither for PIL show() nor plt.imshow() how to reuse
     the same figure. This works in cv2 by simply giving the same window name.
     """
+    if prompt:
+        print('Image is shown on desktop.')
+        print('Press any button to close.')
     im = load_image(im)
-    print('Image is shown on desktop.')
     cv2.imshow(title if title else 'pic-display', im)
-    print('Press any button to continue (if needed click on an image window too; Q to break).')
     key_pressed = chr(cv2.waitKey(0))  # 0 to wait for user input, >0 for milliseconds to wait
     return key_pressed
 
@@ -48,6 +49,8 @@ def show_images(imgs: List[MyImageType], title=None):
     """
     Show many images in the same window.
     """
+    print('Images are shown on desktop.')
+    print('Press any button to go to the next (if needed click on an image window too; Q (capital) to break).')
     for img in imgs:
         key_pressed = show_image(img, title)
         print(key_pressed)
@@ -213,69 +216,92 @@ def test_show_images(image_paths, mask_paths):
     show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'concatenated')
 
 
-def load_paths():
-    imgs_folder = LABELS / 'racks/imgs'
-    masks_folder = LABELS / 'racks/masks'
+def load_paths(label_type):
+    imgs_folder = LABELS / label_type / 'imgs'
+    masks_folder = LABELS / label_type / 'masks'
     image_paths = list(imgs_folder.glob('*.png'))
     mask_paths = list(masks_folder.glob('*.png'))
     return image_paths, mask_paths
 
 
-def classify(image_paths: List[MyImageType], mask_paths: List[MyImageType]):
+def classify(image_paths: List[MyImageType], mask_paths: List[MyImageType], label_type):
     """
     Go over all images and assign a one-char label. Dump results into json file.
     """
+    print('Images are shown on desktop.')
+    print('Press any button to go to the next (if needed click on an image window too; Q (capital) to break).')
+
     logs = {}
     for im, mask in zip(image_paths, mask_paths):
-        key_pressed = show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'images')
+        key_pressed = show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), label_type, prompt=False)
         if key_pressed == 'Q':
             break
         logs[im.name] = key_pressed
     prefix = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    with open(f'{prefix}_user_qc.json', 'w') as f:
+    user_qc_file = LABELS / label_type / f'{prefix}_{label_type}.json'
+    with open(user_qc_file, 'w') as f:
         json.dump(logs, f, indent=4)
+    print(f'Generated {user_qc_file}.')
+    return user_qc_file
 
 
-def create_new_folders():
-    racks_path = Path(LABELS) / 'racks'
-    # create all folders first
-    for value in set(results.values()):
-        new_dir = racks_path / value
-        new_dir.mkdir(parents=True, exist_ok=True)
-        (new_dir / 'imgs').mkdir(parents=True, exist_ok=True)
-        (new_dir / 'masks').mkdir(parents=True, exist_ok=True)
+def _create_new_folders(new_folder_path):
+    new_folder_path.mkdir(parents=True, exist_ok=True)
+    print(f'Created {new_folder_path}.')
+    imgs_folder = new_folder_path / 'imgs'
+    masks_folder = new_folder_path / 'masks'
+    imgs_folder.mkdir(parents=True, exist_ok=True)
+    masks_folder.mkdir(parents=True, exist_ok=True)
+    print(f'Created {imgs_folder}.')
+    print(f'Created {masks_folder}.')
 
 
-def copy_all_files():
-    for name, label in results.items():
-        src_path = racks_path / 'imgs' / name
-        dst_path = racks_path / label / 'imgs' / name
+def create_new_folders(label_type, new_folder_names):
+    folder_path = LABELS / label_type
+    for new_folder_name in new_folder_names:
+        new_folder_path = folder_path / new_folder_name
+        _create_new_folders(new_folder_path)
+
+
+def copy_all_files(user_qc, labels_path: Path):
+    counter = 0
+    for name, label in user_qc.items():
+        src_path = labels_path / 'imgs' / name
+        dst_path = labels_path / label / 'imgs' / name
         shutil.copy(src_path, dst_path)
 
-        src_path = racks_path / 'masks' / name
-        dst_path = racks_path / label / 'masks' / name
+        src_path = labels_path / 'masks' / name
+        dst_path = labels_path / label / 'masks' / name
         shutil.copy(src_path, dst_path)
+        counter += 1
+    print(f'Copied 2 x {counter//2} files.')
+
+
+def check_for_missing_files(image_paths, mask_paths):
+    a = set([x.name for x in image_paths])
+    b = set([x.name for x in mask_paths])
+    extra = a ^ b
+    if not (len(extra) == 0 and len(a) == len(b)):
+        raise AssertionError(f'Following is extra in images:\n{a-b}\nand in masks:\n{b-a}')
+        # TODO print(f'There are {len(a)} labels total. Do you want to delete files in question?') ... input() ... os.remove()
+
+
+def rename_all_files(label_type, old_name, new_name):
+    # rename all files under label_type
+    counter = 0
+    panels_path = LABELS / label_type
+    for src in panels_path.glob('*/*.*'):
+        dst = src.parent / src.name.replace(old_name, new_name)
+        try:
+            os.rename(src, dst)
+        except:
+            break
+        counter += 1
+    print(f'Renamed {counter} files.')
 
 
 if __name__ == '__main__':
-    image_paths, mask_paths = load_paths()
+    # label_type = 'train'
+    # image_paths, mask_paths = load_paths(label_type)
     # test_show_images(image_paths, mask_paths)
-    # classify(image_paths, mask_paths)
-
-    # open json file and copy all the images into a folder based on their label
-    with open('20230105_163949_user_qc.json', 'r') as f:
-        results = json.load(f)
-    print(results)
-
-    racks_path = Path(LABELS) / 'racks'
-    # create_new_folders()
-    # copy_all_files()
-
-
-    # imgs_folder = LABELS / 'racks/g/imgs'
-    # masks_folder = LABELS / 'racks/g/masks'
-    # image_paths = list(imgs_folder.glob('*.png'))
-    # mask_paths = list(masks_folder.glob('*.png'))
-    # classify(image_paths, mask_paths)
-
-
+    pass

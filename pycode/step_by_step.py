@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+from PIL import Image
 import datetime
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms import Normalize
+from torchvision.transforms import Normalize, ToTensor
 import random
 from tqdm import tqdm
 from copy import deepcopy
@@ -780,6 +781,24 @@ def compare_optimizers(model, loss_fn, optimizers, train_loader, val_loader=None
                                'lrs': lrs}})
 
     return results
+
+
+def load_tensor(paths, n_channels, transform, squeeze=True):
+    h, w = Image.open(paths[0]).size
+    tensor = torch.zeros([len(paths), n_channels, h, w])
+    for i, path in enumerate(tqdm(paths)):
+        img = Image.open(path)
+        tensor[i, :, :, :] = transform(img)
+    if squeeze:
+        tensor = tensor.squeeze()
+    return tensor
+
+
+def get_means_and_stdevs(some_tensor):
+    some_tensor = some_tensor.flatten(2, 3)
+    means = some_tensor.mean(axis=2)
+    stdevs = some_tensor.std(axis=2)
+    return means, stdevs
 
 
 class InverseNormalize(Normalize):
