@@ -1,0 +1,5 @@
+/data/*
+/.idea/*
+/.pytest_cache/*
+/.ipynb_checkpoints/*
+/pycode/.ipynb_checkpoints/*
