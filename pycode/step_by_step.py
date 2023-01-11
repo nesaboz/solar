@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import LambdaLR
 import torch.optim as optim
 from torchviz import make_dot
 from torch.utils.data import TensorDataset
+from functools import partial
 
 
 RUNS_FOLDER_NAME = 'runs'
@@ -30,6 +31,32 @@ def make_lr_fn(start_lr, end_lr, num_iter, step_mode='exp'):
         def lr_fn(iteration):
             return np.exp(factor) ** iteration
     return lr_fn
+
+
+def get_means_and_stdevs(tensor_flatten, include_out_of_bounds=True):
+
+    (n_samples, n_channels) = tensor_flatten.shape[:2]
+
+    if include_out_of_bounds:
+        # Computes statistics of each image per channel
+        # Average pixel value per channel will produce (n_samples, n_channels)
+        means = tensor_flatten.mean(axis=2)
+        # Standard deviation of pixel values per channel
+        # (n_samples, n_channels)
+        stdevs = tensor_flatten.std(axis=2)
+    else:
+        means = torch.zeros(n_samples, n_channels)
+        stdevs = torch.zeros(n_samples, n_channels)
+        for i in range(n_samples):
+            for j in range(n_channels):
+                array_per_image_per_channel = tensor_flatten[i, j, :]
+                array_per_image_per_channel = array_per_image_per_channel[array_per_image_per_channel > 0]
+                means[i, j] = array_per_image_per_channel.mean()
+                stdevs[i, j] = array_per_image_per_channel.std()
+
+    return means, stdevs
+
+
 
 
 class StepByStep(object):
@@ -473,7 +500,7 @@ class StepByStep(object):
         return accuracy
 
     @staticmethod
-    def statistics_per_channel(images, labels):
+    def statistics_per_channel(images, labels, include_out_of_bounds=True):
         """
         Application is toward DataLoaders, but could be ran on a Dataset as well (torch.unsqueeze adds a dimension).
 
@@ -495,20 +522,14 @@ class StepByStep(object):
         # NCHW
         n_samples, n_channels, n_height, n_weight = images.size()
         # Flatten HW into a single dimension
-        flatten_per_channel = images.reshape(n_samples, n_channels, -1)
+        images_flatten = images.reshape(n_samples, n_channels, -1)
 
-        # Computes statistics of each image per channel
-        # Average pixel value per channel
-        # (n_samples, n_channels)
-        means = flatten_per_channel.mean(axis=2)
-        # Standard deviation of pixel values per channel
-        # (n_samples, n_channels)
-        stds = flatten_per_channel.std(axis=2)
+        means, stdevs = get_means_and_stdevs(images_flatten, include_out_of_bounds)
 
         # Adds up statistics of all images in a mini-batch
         # (1, n_channels)
         sum_means = means.sum(axis=0)
-        sum_stds = stds.sum(axis=0)
+        sum_stds = stdevs.sum(axis=0)
         # Makes a tensor of shape (1, n_channels)
         # with the number of samples in the mini-batch
         n_samples = torch.tensor([n_samples] * n_channels).float()
@@ -518,7 +539,7 @@ class StepByStep(object):
         return torch.stack([n_samples, sum_means, sum_stds])
 
     @staticmethod
-    def make_normalizer(loader):
+    def make_normalizer(loader, include_out_of_bounds=True):
         """
         Applies statistics_per_channel on a loader that looks for example like this:
                 (tensor([6555., 6555., 6555.]),
@@ -526,15 +547,15 @@ class StepByStep(object):
                  tensor([541.4397, 492.6389, 484.5458]))
         to get a normalizer.
 
-        Args:
-            loader:
 
         Returns:
             Normalizer
 
         """
 
-        total_samples, total_means, total_stds = StepByStep.loader_apply(loader, StepByStep.statistics_per_channel)
+        total_samples, total_means, total_stds = StepByStep.loader_apply(
+            loader, partial(StepByStep.statistics_per_channel, include_out_of_bounds=include_out_of_bounds)
+        )
         norm_mean = total_means / total_samples
         norm_std = total_stds / total_samples
         return Normalize(mean=norm_mean, std=norm_std)
@@ -792,13 +813,6 @@ def load_tensor(paths, n_channels, transform, squeeze=True):
     if squeeze:
         tensor = tensor.squeeze()
     return tensor
-
-
-def get_means_and_stdevs(some_tensor):
-    some_tensor = some_tensor.flatten(2, 3)
-    means = some_tensor.mean(axis=2)
-    stdevs = some_tensor.std(axis=2)
-    return means, stdevs
 
 
 class InverseNormalize(Normalize):
