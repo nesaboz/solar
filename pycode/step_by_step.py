@@ -33,8 +33,11 @@ def make_lr_fn(start_lr, end_lr, num_iter, step_mode='exp'):
     return lr_fn
 
 
-def get_means_and_stdevs(tensor_flatten, include_out_of_bounds=True):
-
+def get_means_and_stdevs(images, labels, include_out_of_bounds=True):
+    assert images.dim() == 4
+    assert labels.dim() == 3
+    tensor_flatten = images.flatten(2, 3)
+    labels_flatten = labels.flatten(1, 2)
     (n_samples, n_channels) = tensor_flatten.shape[:2]
 
     if include_out_of_bounds:
@@ -45,18 +48,16 @@ def get_means_and_stdevs(tensor_flatten, include_out_of_bounds=True):
         # (n_samples, n_channels)
         stdevs = tensor_flatten.std(axis=2)
     else:
+        # the following ended up giving very similar results as above
         means = torch.zeros(n_samples, n_channels)
         stdevs = torch.zeros(n_samples, n_channels)
         for i in range(n_samples):
             for j in range(n_channels):
                 array_per_image_per_channel = tensor_flatten[i, j, :]
-                array_per_image_per_channel = array_per_image_per_channel[array_per_image_per_channel > 0]
+                array_per_image_per_channel = array_per_image_per_channel[labels_flatten[i, :] >= 0]
                 means[i, j] = array_per_image_per_channel.mean()
                 stdevs[i, j] = array_per_image_per_channel.std()
-
     return means, stdevs
-
-
 
 
 class StepByStep(object):
@@ -186,9 +187,10 @@ class StepByStep(object):
         Passes x though the model to get predictions.
 
         Args:
-            x:
+            x (list, tuple, NumPy ``ndarray``, scalar, and other types)
 
-        Returns: self.model(x)
+        Returns:
+            self.model(x)
 
         """
 
@@ -308,6 +310,7 @@ class StepByStep(object):
         try:
             self.train_loader.sampler.generator.manual_seed(seed)
         except AttributeError:
+            print('failed to set loader')
             pass
 
     def count_parameters(self):
@@ -515,16 +518,13 @@ class StepByStep(object):
                             [ 3.9893,  3.9119,  3.6910]])
 
         """
-        if len(images.shape) < 4:
+        if images.dim() < 4:
             # this means there is only one image so n_samples = 1
             images = torch.unsqueeze(images, 0)
 
         # NCHW
         n_samples, n_channels, n_height, n_weight = images.size()
-        # Flatten HW into a single dimension
-        images_flatten = images.reshape(n_samples, n_channels, -1)
-
-        means, stdevs = get_means_and_stdevs(images_flatten, include_out_of_bounds)
+        means, stdevs = get_means_and_stdevs(images, labels, include_out_of_bounds)
 
         # Adds up statistics of all images in a mini-batch
         # (1, n_channels)

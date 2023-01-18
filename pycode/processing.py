@@ -7,7 +7,7 @@ import os
 from tqdm import tqdm
 import re
 
-from pycode.constants import ROOT
+from constants import ROOT
 
 PIL.Image.MAX_IMAGE_PIXELS = 339738624
 
@@ -63,7 +63,6 @@ class BigImage(object):
     Args:
         tag (str): like 'R2C2'
         image_filename = 'IMG_PHR1B_PMS-N_202112241708104_ORT_6126758101_' + tag + '.TIF'
-
         image_pathname (Path): Path to the image.
         coordinates ((float, float)): Latitude and longitude.
         output_folder: folder with cropped images.
@@ -77,7 +76,6 @@ class BigImage(object):
         self.image_dirname = Path(ROOT) / 'data' / self.id / self.folder
         self.image_filename = f"{config['prefix']}{tag}.{config['extension']}"
         self.coordinates = config['coordinates'][tag]
-
         self.image_pathname = self.image_dirname / self.image_filename
         self.cropped_folder = self.image_dirname / 'cropped'
         self.cropped_info_file = self.cropped_folder.parent / (tag + '_cropped_images_info.csv')
@@ -196,7 +194,7 @@ def crop_4_images():
         big_image.crop_large_image()
 
 
-def stitch_images():
+def test_stitch_images():
     # stitch back images
     big_image = BigImage('R1C2')
     big_image.stitch_images(big_image.image_dirname / 'cropped')

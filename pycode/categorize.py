@@ -1,11 +1,11 @@
 import datetime
 import json
 import os
+import shutil
 from pathlib import Path
 from pathlib import PosixPath
-from typing import List, Dict
+from typing import List
 from typing import TypeVar
-import shutil
 
 import PIL.Image
 import cv2
@@ -58,7 +58,7 @@ def show_images(imgs: List[MyImageType], title=None):
             break
 
 
-def overlay_two_images(im: MyImageType, mask: MyImageType) -> numpy.array:
+def overlay_two_images(im: MyImageType, mask: MyImageType, alpha=0.5, to_numpy=True) -> numpy.array or PIL.Image.Image:
     """
     Overlay image and mask using blend, alpha=0.3.
     """
@@ -69,8 +69,8 @@ def overlay_two_images(im: MyImageType, mask: MyImageType) -> numpy.array:
     im = Image.fromarray(im)
     mask = Image.fromarray(mask)
 
-    new_img = Image.blend(im, mask, 0.3)
-    return np.array(new_img)
+    new_img = Image.blend(im, mask, alpha)
+    return np.array(new_img) if to_numpy else new_img
 
 
 def concat_images(imga, imgb, vertical=False, gap=10):
@@ -181,41 +181,6 @@ def concat_n_images(image_list, max_in_a_row=None, gap=10):
     return result
 
 
-# def store_based_on_user_input(input_filename):
-#     """
-#     Categorize images based on an input_filename categorizations
-#
-#     Args:
-#         input_filename:
-#     """
-#     if not os.path.exists(input_filename):
-#         raise FileNotFoundError()
-#     solar_module_types = read_csv_file_into_dict(input_filename)
-#
-#     for image_filename, solar_module_type in solar_module_types.items():
-#         # locate img and mask
-#         solar_module_type = solar_module_type.strip()
-#         im_path = os.path.join(KIEWIT, MODULES_FOLDER, 'imgs', image_filename)
-#         mask_path = os.path.join(KIEWIT, MODULES_FOLDER, 'masks', image_filename)
-#
-#         new_im_path = os.path.join(KIEWIT, MODULES_FOLDER, 'per_type', 'type_' + solar_module_type, 'imgs', image_filename)
-#         new_mask_path = os.path.join(KIEWIT, MODULES_FOLDER, 'per_type', 'type_' + solar_module_type, 'masks', image_filename)
-#
-#         os.makedirs(os.path.dirname(new_im_path), exist_ok=True)
-#         os.makedirs(os.path.dirname(new_mask_path), exist_ok=True)
-#         shutil.copyfile(im_path, new_im_path)
-#         shutil.copyfile(mask_path, new_mask_path)
-
-def test_show_images(image_paths, mask_paths):
-    im = image_paths[0]
-    mask = mask_paths[0]
-    show_image(im, 'image')
-    show_images(image_paths[:4], 'images')
-    show_image(overlay_two_images(im, mask), 'overlay')
-    show_image(concat_images(im, mask), 'concatenated')
-    show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'concatenated')
-
-
 def load_paths(label_type):
     imgs_folder = LABELS / label_type / 'imgs'
     masks_folder = LABELS / label_type / 'masks'
@@ -300,8 +265,19 @@ def rename_all_files(label_type, old_name, new_name):
     print(f'Renamed {counter} files.')
 
 
+def test_show_images():
+    label_type = 'labeled_data'
+    image_paths, mask_paths = load_paths(label_type)
+    idx = 10
+    im = image_paths[idx]
+    mask = mask_paths[idx]
+    show_image(im, 'image')
+    show_images(image_paths[:4], 'images')
+    show_image(overlay_two_images(im, mask), 'overlay')
+    show_image(concat_images(im, mask), 'concatenated')
+    show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'concatenated')
+    show_image(overlay_two_images(im, mask, False), 'overlayed')
+
+
 if __name__ == '__main__':
-    # label_type = 'train'
-    # image_paths, mask_paths = load_paths(label_type)
-    # test_show_images(image_paths, mask_paths)
-    pass
+    test_show_images()
