@@ -114,7 +114,7 @@ class StepByStep(object):
         batch_y = batch_y.to(self.device)
 
         predictions = self.model(batch_x)
-        loss = self.loss_fn(predictions, batch_y)  # order is critical ofcourse, first are predictions then true labels.
+        loss = self.loss_fn(predictions, batch_y)  # note the order, first are predictions then true labels.
         loss.backward()
 
         self.optimizer.step()
@@ -310,7 +310,7 @@ class StepByStep(object):
         try:
             self.train_loader.sampler.generator.manual_seed(seed)
         except AttributeError:
-            print('failed to set loader')
+            print("Failed to set loader seed.")
             pass
 
     def count_parameters(self):
