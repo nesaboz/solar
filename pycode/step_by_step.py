@@ -95,6 +95,8 @@ class StepByStep(object):
         self.val_losses = []
         self.learning_rates = []
 
+        self.metric = None
+
         self.visualization = {}
         self.handles = {}
 
@@ -221,6 +223,7 @@ class StepByStep(object):
             'optimizer_state_dict': self.optimizer.state_dict(),
             'losses': self.losses,
             'val_losses': self.val_losses,
+            'metric': self.metric
             }
 
         torch.save(checkpoint, filename)
