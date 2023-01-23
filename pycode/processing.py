@@ -6,7 +6,6 @@ import pandas as pd
 import os
 from tqdm import tqdm
 import re
-
 from constants import ROOT
 
 PIL.Image.MAX_IMAGE_PIXELS = 339738624
@@ -78,12 +77,17 @@ class BigImage(object):
         self.coordinates = config['coordinates'][tag]
         self.image_pathname = self.image_dirname / self.image_filename
         self.cropped_folder = self.image_dirname / 'cropped'
-        self.cropped_info_file = self.cropped_folder.parent / (tag + '_cropped_images_info.csv')
+        self.cropped_info_file = Path(ROOT) / 'data' / (tag + '_cropped_images_info.csv')
 
     @property
     def size(self):
-        with Image.open(self.image_pathname) as im:
-            return im.size
+        
+        if self.image_pathname.exists():
+            with Image.open(self.image_pathname) as im:
+                return im.size
+        print('File was not found, using defaults.')
+        sizes = {'R1C1': (18432, 18432), 'R1C2': (17968, 18432), 'R2C1': (18432, 9002), 'R2C2': (17968, 9002)}
+        return sizes[self.tag]
 
     def _crop_and_write(self,
                         img: Image,

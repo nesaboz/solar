@@ -1,3 +1,3 @@
-ROOT = '/Users/nenad.bozinovic/PycharmProjects/solar'
+ROOT = '/home/solar'
 TRAIN = 'train'
 VALID = 'valid'

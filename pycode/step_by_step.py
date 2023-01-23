@@ -82,6 +82,7 @@ class StepByStep(object):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         self.model.to(self.device)
+        self.loss_fn.to(self.device)
 
         self.train_loader = None
         self.val_loader = None
@@ -200,10 +201,8 @@ class StepByStep(object):
         # need to evaluate
         prediction = self.model(torch.as_tensor(x).float().to(self.device))
         self.model.train()
-        if to_numpy:
-            return prediction.detach().cpu().numpy()
-        else:
-            return prediction
+        predict = prediction.detach().cpu()
+        return predict.numpy() if to_numpy else predict
 
     def plot_losses(self):
         fig = plt.figure(figsize=(10, 4))
