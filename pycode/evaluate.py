@@ -119,6 +119,7 @@ def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, n_c
     batch_size = 32
     unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=batch_size)
 
+    print('Evaluating ... ')
     unlabeled_loader_iter = iter(unlabeled_loader)
     batch_idx = 0
     for x_unlabeled_batch, y_unlabeled_batch in tqdm(unlabeled_loader_iter):
@@ -128,10 +129,12 @@ def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, n_c
                        run_folder=run_folder)
         batch_idx += 1
 
-    big_image = BigImage('R1C1')
+    print('Stitching ... ')
+    for tag in ['R1C1','R1C2','R2C1','R2C2']:
+        big_image = BigImage(tag)
 
-    big_image.stitch_images(run_folder / 'predicted',
-                            run_folder / (big_image.tag + '_predicted.png'))
+        big_image.stitch_images(run_folder / 'predicted',
+                                run_folder / (big_image.tag + '_predicted.png'))
 
-    big_image.stitch_images(run_folder / 'overlayed',
-                            run_folder / (big_image.tag + '_overlayed.png'))
+        big_image.stitch_images(run_folder / 'overlayed',
+                                run_folder / (big_image.tag + '_overlayed.png'))

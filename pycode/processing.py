@@ -245,7 +245,7 @@ def _get_tensors(image_paths, mask_paths, title_mapping):
         else:
             # this is pure zeros
             mask_tensor = mask_tensor[0, :, :]
-            class_id = title_mapping['background']
+            class_id = title_mapping['R1C1']
 
         # make it binary
         mask_tensor = (1 - mask_tensor < mask_tensor.max()).long()  # this line has given me issues several times now due to some corner pixels
@@ -270,6 +270,10 @@ def get_labeled_tensors(data_dir, title_mapping):
     # some weird bug where linux finds extra files that start with '.'
     image_paths = filter(lambda x: x.name[0] != '.', image_paths)
     mask_paths = filter(lambda x: x.name[0] != '.', mask_paths)
+    
+    names = title_mapping.keys()
+    image_paths = [image_path for image_path in image_paths if any([name in image_path.name for name in names])]
+    mask_paths = [mask_path for mask_path in mask_paths if any([name in mask_path.name for name in names])]
 
     image_paths = sorted(list(image_paths))
     mask_paths = sorted(list(mask_paths))
@@ -312,12 +316,13 @@ def get_weights(train_tensor_y, n_classes):
     return weights
 
 
-def get_unlabeled_tensors(data_dir, shape):
+def get_unlabeled_tensors(data_dir, shape, filter_fn=None):
     unlabeled_imgs_dir = data_dir / 'unlabeled'
     unlabeled_image_paths = unlabeled_imgs_dir.glob('*.png')
     unlabeled_image_paths = filter(lambda x: x.name[0] != '.', unlabeled_image_paths)
-    unlabeled_image_paths = sorted(list(filter(
-        lambda x: 'R1C1' in x.name, unlabeled_image_paths)))
+    if filter_fn:
+        unlabeled_image_paths = filter(filter_fn, unlabeled_image_paths)
+    unlabeled_image_paths = sorted(list(unlabeled_image_paths))
     N = len(unlabeled_image_paths)
     n_channels, h, w = shape
     unlabeled_tensor_x = torch.zeros([N, n_channels, h, w])
