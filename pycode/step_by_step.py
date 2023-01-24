@@ -280,6 +280,17 @@ class StepByStep(object):
             result.append((n_correct, n_class))
         return torch.tensor(result)
 
+    def get_metric(self, metric_fn):
+        val_loader = self.val_loader
+        val_loader_iter = iter(val_loader)
+        jaccard_indices = []
+        for x_val, y_val in tqdm(val_loader_iter):
+            y_pred = self.predict(x_val, to_numpy=False).argmax(1)
+            curr = metric_fn(y_pred, y_val, task="multiclass", num_classes=self.model.n_classes)
+            jaccard_indices.append(curr)
+        self.metric = np.array(jaccard_indices).mean()
+        return self.metric
+
     @staticmethod
     def loader_apply(loader, func, reduce='sum'):
         """

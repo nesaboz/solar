@@ -1,12 +1,23 @@
-import PIL
-from PIL import Image
-from math import cos, degrees
-from pathlib import Path
-import pandas as pd
 import os
-from tqdm import tqdm
 import re
+from math import cos
+from math import degrees
+from pathlib import Path
+
+import PIL
+import numpy as np
+import pandas as pd
+import torch
+from PIL import Image
+from tqdm import tqdm
+
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset, random_split
+from torchvision.transforms import Compose, ToTensor
 from constants import ROOT
+
+from step_by_step import StepByStep
+from categorize import check_for_missing_files
 
 PIL.Image.MAX_IMAGE_PIXELS = 339738624
 
@@ -204,5 +215,142 @@ def test_stitch_images():
     big_image.stitch_images(big_image.image_dirname / 'cropped')
 
 
+def get_tensors(image_paths, mask_paths):
+    n_channels, h, w = ToTensor()(Image.open(image_paths[0]).convert('RGB')).shape
+
+    x_tensor = torch.zeros([len(image_paths), n_channels, h, w])
+    y_tensor = torch.zeros([len(image_paths), h, w], dtype=torch.long)  # we'll have only class number mask
+
+    for i, (image_path, mask_path) in enumerate(zip(tqdm(image_paths), mask_paths)):
+        x_tensor[i, :, :, :] = ToTensor()(Image.open(image_path).convert('RGB'))
+
+        mask = Image.open(mask_path).convert('RGB')
+        mask_tensor = ToTensor()(mask)
+
+        # let's extracts only relevant channel (0 - red for rack, 2 - blue for panel):
+        # we don't have mixed labels
+        name = image_path.name
+        if 'commonpanel' in name:
+            mask_tensor = mask_tensor[2, :, :]
+            class_id = 1
+        elif 'commonrack' in name:
+            mask_tensor = mask_tensor[0, :, :]
+            class_id = 2
+        elif 'densepanel' in name:
+            mask_tensor = mask_tensor[2, :, :]
+            class_id = 3
+        elif 'denserack' in name:
+            mask_tensor = mask_tensor[2, :, :]
+            class_id = 4
+        else:
+            # this is pure zeros
+            mask_tensor = mask_tensor[0, :, :]
+            class_id = 0
+
+        # make it binary
+        mask_tensor = (mask_tensor > mask_tensor.min()).long()
+
+        # multiply with class_id
+        mask_tensor *= class_id
+
+        y_tensor[i, :, :] = mask_tensor
+
+    return x_tensor, y_tensor
+
+
+class TransformedTensorDataset(Dataset):
+    def __init__(self, x, y, transform=None):
+        self.x = x
+        self.y = y
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x = self.x[index]
+        if self.transform:
+            x = self.transform(x)
+
+        return x, self.y[index]
+
+    def __len__(self):
+        return len(self.x)
+
+
+def prep_data(n_classes, applier):
+
+    proj_dir = Path('.').resolve().parent
+    data_dir = proj_dir / 'data'
+    labeled_imgs_dir = data_dir / 'labeled/imgs'
+    labeled_masks_dir = data_dir / 'labeled/masks'
+
+    image_paths = labeled_imgs_dir.glob('*.png')
+    mask_paths = labeled_masks_dir.glob('*.png')
+
+    # some weird bug where linux finds extra files that start with '.'
+    image_paths = filter(lambda x: x.name[0] != '.', image_paths)
+    mask_paths = filter(lambda x: x.name[0] != '.', mask_paths)
+
+    image_paths = filter(lambda x: 'smallpost' not in x.name, image_paths)
+    mask_paths = filter(lambda x: 'smallpost' not in x.name, mask_paths)
+    image_paths = sorted(list(image_paths))
+    mask_paths = sorted(list(mask_paths))
+    check_for_missing_files(image_paths, mask_paths)
+    labeled_tensor_x, labeled_tensor_y = get_tensors(image_paths, mask_paths)
+
+    unlabeled_imgs_dir = data_dir / 'unlabeled'
+    unlabeled_image_paths = unlabeled_imgs_dir.glob('*.png')
+    unlabeled_image_paths = sorted(list(filter(
+        lambda x: 'R1C1' in x.name, unlabeled_image_paths)))
+    N = len(unlabeled_image_paths)
+    n_channels, h, w = ToTensor()(Image.open(unlabeled_image_paths[0]).convert('RGB')).shape
+    unlabeled_tensor_x = torch.zeros([len(unlabeled_image_paths[:N]), n_channels, h, w])
+    unlabeled_tensor_y = torch.zeros([len(unlabeled_image_paths[:N]), h, w],
+                                     dtype=torch.long)  # we'll have only class number mask
+    idx_map = {}
+    for i, image_path in enumerate(tqdm(unlabeled_image_paths[:N])):
+        unlabeled_tensor_x[i, :, :, :] = ToTensor()(Image.open(image_path))
+        unlabeled_tensor_y[i, :, :] = torch.zeros(*unlabeled_tensor_x.shape[2:])
+        idx_map[i] = image_path.name
+
+    torch.manual_seed(13)
+    N = len(labeled_tensor_x)
+    n_train = int(.85 * N)
+    n_val = N - n_train
+    train_subset, val_subset = random_split(TransformedTensorDataset(labeled_tensor_x, labeled_tensor_y), [n_train, n_val])
+
+    train_idx = train_subset.indices
+    val_idx = val_subset.indices
+
+    train_tensor_x = labeled_tensor_x[train_idx]
+    train_tensor_y = labeled_tensor_y[train_idx]
+    val_tensor_x = labeled_tensor_x[val_idx]
+    val_tensor_y = labeled_tensor_y[val_idx]
+
+    torch.manual_seed(13)
+    temp_train_dataset = TransformedTensorDataset(train_tensor_x, train_tensor_y, transform=applier)
+    temp_train_loader = DataLoader(temp_train_dataset, batch_size=32)
+    normalizer = StepByStep.make_normalizer(temp_train_loader)
+
+    train_composer = Compose([applier, normalizer])  # first is jitter with RandomApply, then normalizer!
+    val_composer = Compose([normalizer])
+
+    train_dataset = TransformedTensorDataset(train_tensor_x, train_tensor_y, transform=train_composer)
+    val_dataset = TransformedTensorDataset(val_tensor_x, val_tensor_y, transform=val_composer)
+
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32)
+
+    contributions = np.array([(train_tensor_y == i).float().sum() for i in range(n_classes)])
+    weights = np.zeros(n_classes)
+    for i, contrib in enumerate(contributions):
+        if contrib != 0:
+            weights[i] = 1.0 / contrib
+    weights = weights / weights.sum() * n_classes
+    weights = torch.tensor(weights, dtype=torch.float)  # required by the CrossEntropyLoss
+
+    return train_loader, val_loader, weights, n_channels, normalizer, \
+        unlabeled_tensor_x, unlabeled_tensor_y, val_composer, idx_map
+
+
 if __name__ == '__main__':
     pass
+
