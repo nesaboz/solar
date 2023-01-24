@@ -2,9 +2,8 @@ conda init zsh
 
 conda update -n base -c conda-forge conda
 
-# this will ask for time zones
-apt-get update
-apt-get install ffmpeg libsm6 libxext6  -y  # avoids ImportError: libGL.so.1: cannot open shared object file: No such file or directory
+# apt-get is for Linux, use `brew` on Mac
+apt-get update && apt-get install libgl1 -y  # avoids ImportError: libGL.so.1: cannot open shared object file: No such file or directory
 
 # to get IP address
 apt install curl

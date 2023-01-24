@@ -4,4 +4,6 @@
 /.ipynb_checkpoints/*
 /pycode/.ipynb_checkpoints/*
 /pycode/constants.py
+/pycode/__pycache__
 /token
+/runs

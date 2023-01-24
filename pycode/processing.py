@@ -287,7 +287,6 @@ def get_labeled_tensors(data_dir, title_mapping):
     return labeled_tensor_x, labeled_tensor_y, labeled_idx_map
 
 
-
 class TransformedTensorDataset(Dataset):
     def __init__(self, x, y, transform=None):
         self.x = x
