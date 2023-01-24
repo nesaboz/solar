@@ -1,4 +1,4 @@
-ROOT = '/Users/nenad.bozinovic/PycharmProjects/solar'
-RUNS_FOLDER = '/Users/nenad.bozinovic/PycharmProjects/solar/runs'
+ROOT = '/home/solar'
+RUNS_FOLDER = '/home/runs'
 TRAIN = 'train'
 VALID = 'valid'

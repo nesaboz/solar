@@ -215,7 +215,7 @@ def test_stitch_images():
     big_image.stitch_images(big_image.image_dirname / 'cropped')
 
 
-def get_tensors(image_paths, mask_paths):
+def _get_tensors(image_paths, mask_paths, title_mapping):
     n_channels, h, w = ToTensor()(Image.open(image_paths[0]).convert('RGB')).shape
 
     x_tensor = torch.zeros([len(image_paths), n_channels, h, w])
@@ -230,25 +230,25 @@ def get_tensors(image_paths, mask_paths):
         # let's extracts only relevant channel (0 - red for rack, 2 - blue for panel):
         # we don't have mixed labels
         name = image_path.name
-        if 'commonpanel' in name:
-            mask_tensor = mask_tensor[2, :, :]
-            class_id = 1
-        elif 'commonrack' in name:
+        if 'commonrack' in name:
             mask_tensor = mask_tensor[0, :, :]
-            class_id = 2
-        elif 'densepanel' in name:
+            class_id = title_mapping['commonrack']
+        elif 'commonpanel' in name:
             mask_tensor = mask_tensor[2, :, :]
-            class_id = 3
+            class_id = title_mapping['commonpanel']
         elif 'denserack' in name:
             mask_tensor = mask_tensor[2, :, :]
-            class_id = 4
+            class_id = title_mapping['denserack']
+        elif 'densepanel' in name:
+            mask_tensor = mask_tensor[2, :, :]
+            class_id = title_mapping['densepanel']
         else:
             # this is pure zeros
             mask_tensor = mask_tensor[0, :, :]
-            class_id = 0
+            class_id = title_mapping['background']
 
         # make it binary
-        mask_tensor = (mask_tensor > mask_tensor.min()).long()
+        mask_tensor = (1 - mask_tensor < mask_tensor.max()).long()  # this line has given me issues several times now due to some corner pixels
 
         # multiply with class_id
         mask_tensor *= class_id
@@ -256,6 +256,32 @@ def get_tensors(image_paths, mask_paths):
         y_tensor[i, :, :] = mask_tensor
 
     return x_tensor, y_tensor
+
+
+
+def get_labeled_tensors(data_dir, title_mapping):
+
+    labeled_imgs_dir = data_dir / 'labeled/imgs'
+    labeled_masks_dir = data_dir / 'labeled/masks'
+
+    image_paths = labeled_imgs_dir.glob('*.png')
+    mask_paths = labeled_masks_dir.glob('*.png')
+
+    # some weird bug where linux finds extra files that start with '.'
+    image_paths = filter(lambda x: x.name[0] != '.', image_paths)
+    mask_paths = filter(lambda x: x.name[0] != '.', mask_paths)
+
+    image_paths = sorted(list(image_paths))
+    mask_paths = sorted(list(mask_paths))
+    
+    labeled_idx_map = {i: image_path.name for i, image_path in enumerate(image_paths)}
+    
+    check_for_missing_files(image_paths, mask_paths)
+    
+    labeled_tensor_x, labeled_tensor_y = _get_tensors(image_paths, mask_paths, title_mapping)
+
+    return labeled_tensor_x, labeled_tensor_y, labeled_idx_map
+
 
 
 class TransformedTensorDataset(Dataset):
@@ -275,42 +301,38 @@ class TransformedTensorDataset(Dataset):
         return len(self.x)
 
 
-def prep_data(n_classes, applier):
+def get_weights(train_tensor_y, n_classes):
+    contributions = np.array([(train_tensor_y == i).float().sum() for i in range(n_classes)])
+    weights = np.zeros(n_classes)
+    for i, contrib in enumerate(contributions):
+        if contrib != 0:
+            weights[i] = 1.0 / contrib
+    weights = weights / weights.sum() * n_classes
+    weights = torch.tensor(weights, dtype=torch.float)  # required by the CrossEntropyLoss
+    return weights
 
-    proj_dir = Path('.').resolve().parent
-    data_dir = proj_dir / 'data'
-    labeled_imgs_dir = data_dir / 'labeled/imgs'
-    labeled_masks_dir = data_dir / 'labeled/masks'
 
-    image_paths = labeled_imgs_dir.glob('*.png')
-    mask_paths = labeled_masks_dir.glob('*.png')
-
-    # some weird bug where linux finds extra files that start with '.'
-    image_paths = filter(lambda x: x.name[0] != '.', image_paths)
-    mask_paths = filter(lambda x: x.name[0] != '.', mask_paths)
-
-    image_paths = filter(lambda x: 'smallpost' not in x.name, image_paths)
-    mask_paths = filter(lambda x: 'smallpost' not in x.name, mask_paths)
-    image_paths = sorted(list(image_paths))
-    mask_paths = sorted(list(mask_paths))
-    check_for_missing_files(image_paths, mask_paths)
-    labeled_tensor_x, labeled_tensor_y = get_tensors(image_paths, mask_paths)
-
+def get_unlabeled_tensors(data_dir, shape):
     unlabeled_imgs_dir = data_dir / 'unlabeled'
     unlabeled_image_paths = unlabeled_imgs_dir.glob('*.png')
+    unlabeled_image_paths = filter(lambda x: x.name[0] != '.', unlabeled_image_paths)
     unlabeled_image_paths = sorted(list(filter(
         lambda x: 'R1C1' in x.name, unlabeled_image_paths)))
     N = len(unlabeled_image_paths)
-    n_channels, h, w = ToTensor()(Image.open(unlabeled_image_paths[0]).convert('RGB')).shape
-    unlabeled_tensor_x = torch.zeros([len(unlabeled_image_paths[:N]), n_channels, h, w])
-    unlabeled_tensor_y = torch.zeros([len(unlabeled_image_paths[:N]), h, w],
-                                     dtype=torch.long)  # we'll have only class number mask
-    idx_map = {}
+    n_channels, h, w = shape
+    unlabeled_tensor_x = torch.zeros([N, n_channels, h, w])
+    unlabeled_tensor_y = torch.zeros([N, h, w], dtype=torch.long)  # we'll have only class number mask
+    unlabeled_idx_map = {}
     for i, image_path in enumerate(tqdm(unlabeled_image_paths[:N])):
         unlabeled_tensor_x[i, :, :, :] = ToTensor()(Image.open(image_path))
         unlabeled_tensor_y[i, :, :] = torch.zeros(*unlabeled_tensor_x.shape[2:])
-        idx_map[i] = image_path.name
+        unlabeled_idx_map[i] = image_path.name
 
+    return unlabeled_tensor_x, unlabeled_tensor_y, unlabeled_idx_map
+
+
+def prep_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map, applier, n_classes, batch_size=32):
+    
     torch.manual_seed(13)
     N = len(labeled_tensor_x)
     n_train = int(.85 * N)
@@ -324,10 +346,12 @@ def prep_data(n_classes, applier):
     train_tensor_y = labeled_tensor_y[train_idx]
     val_tensor_x = labeled_tensor_x[val_idx]
     val_tensor_y = labeled_tensor_y[val_idx]
+    
+    val_idx_map = {i: labeled_idx_map[idx] for i, idx in enumerate(val_idx)}
 
     torch.manual_seed(13)
     temp_train_dataset = TransformedTensorDataset(train_tensor_x, train_tensor_y, transform=applier)
-    temp_train_loader = DataLoader(temp_train_dataset, batch_size=32)
+    temp_train_loader = DataLoader(temp_train_dataset, batch_size=batch_size)
     normalizer = StepByStep.make_normalizer(temp_train_loader)
 
     train_composer = Compose([applier, normalizer])  # first is jitter with RandomApply, then normalizer!
@@ -335,20 +359,13 @@ def prep_data(n_classes, applier):
 
     train_dataset = TransformedTensorDataset(train_tensor_x, train_tensor_y, transform=train_composer)
     val_dataset = TransformedTensorDataset(val_tensor_x, val_tensor_y, transform=val_composer)
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    
+    weights = get_weights(train_tensor_y, n_classes)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32)
-
-    contributions = np.array([(train_tensor_y == i).float().sum() for i in range(n_classes)])
-    weights = np.zeros(n_classes)
-    for i, contrib in enumerate(contributions):
-        if contrib != 0:
-            weights[i] = 1.0 / contrib
-    weights = weights / weights.sum() * n_classes
-    weights = torch.tensor(weights, dtype=torch.float)  # required by the CrossEntropyLoss
-
-    return train_loader, val_loader, weights, n_channels, normalizer, \
-        unlabeled_tensor_x, unlabeled_tensor_y, val_composer, idx_map
+    return train_loader, val_loader, val_idx_map, normalizer, val_composer, weights
 
 
 if __name__ == '__main__':

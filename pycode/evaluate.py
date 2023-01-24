@@ -47,10 +47,24 @@ from step_by_step import StepByStep
 from categorize import check_for_missing_files
 
 
-def convert_class_mask_to_rgb_image(im):
-    b = np.zeros([im.shape[0], im.shape[1], 3], dtype='uint8')
-    for class_id in range(3):
-        b[:, :, class_id] = np.array((im == (class_id + 1)) * 255, dtype='uint8')
+def convert_class_mask_to_rgb_image(im, n_classes):
+    """
+    im is of shape (h, w) with each pixels being assigned one of the values in (0, n_clases-1) range.
+    We want to convert classes to colors, like 0 to black, 1 to red, 2 to green, 3 to blue, 4 to yellow.
+    
+    """
+    h, w = im.shape
+    b = np.zeros([h, w, 3], dtype='uint8')
+    for class_id in range(1, n_classes):
+        if class_id == 1:
+            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to red, 
+        elif class_id == 2:
+            b[:, :, 1] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to green, 
+        elif class_id == 3:
+            b[:, :, 2] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to blue, 
+        elif class_id == 4:
+            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to yellow,
+            b[:, :, 1] += np.array((im == class_id) * 255, dtype='uint8')
     return b
 
 
@@ -62,7 +76,7 @@ def save_image(im: Image, filepath: Path, overwrite: bool = False):
     im.save(filepath, "PNG")
 
 
-def display_images(x_batch, y_batch, y_pred_batch, normalizer,
+def display_images(x_batch, y_batch, y_pred_batch, n_classes, normalizer,
                    idx_map=None, idx_offset=0, save=False, overwrite=False,
                    alpha=0.3, run_folder=None):
     if len(x_batch) > 64:
@@ -73,8 +87,8 @@ def display_images(x_batch, y_batch, y_pred_batch, normalizer,
 
     for idx in range(len(x_batch)):
         # convert to PIL images
-        prediction = ToPILImage()(convert_class_mask_to_rgb_image(y_pred_batch[idx, :, :]))
-        label_mask = ToPILImage()(y_batch[idx, :, :].float())
+        prediction = ToPILImage()(convert_class_mask_to_rgb_image(y_pred_batch[idx, :, :], n_classes))
+        label_mask = ToPILImage()(convert_class_mask_to_rgb_image(y_batch[idx, :, :], n_classes))
         original = ToPILImage()(inv_normalizer(x_batch[idx, :, :, :]))
         overlayed = overlay_two_images(original, prediction, alpha=alpha, to_numpy=False)
 
@@ -98,8 +112,9 @@ def display_images(x_batch, y_batch, y_pred_batch, normalizer,
             save_image(overlayed, run_folder / 'overlayed' / name, overwrite)
 
 
-def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, normalizer,
+def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, n_classes, normalizer,
                        sbs, run_folder, idx_map):
+    
     unlabeled_dataset = TransformedTensorDataset(unlabeled_tensor_x, unlabeled_tensor_y, transform=val_composer)
     batch_size = 32
     unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=batch_size)
@@ -108,7 +123,7 @@ def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, nor
     batch_idx = 0
     for x_unlabeled_batch, y_unlabeled_batch in tqdm(unlabeled_loader_iter):
         y_unlabeled_pred_batch = sbs.predict(x_unlabeled_batch, to_numpy=False).argmax(1)
-        display_images(x_unlabeled_batch, y_unlabeled_batch, y_unlabeled_pred_batch, normalizer,
+        display_images(x_unlabeled_batch, y_unlabeled_batch, y_unlabeled_pred_batch, n_classes, normalizer,
                        idx_map, idx_offset=batch_idx * batch_size, save=True, overwrite=True,
                        run_folder=run_folder)
         batch_idx += 1
