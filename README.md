@@ -22,10 +22,14 @@ Achieved 71% jaccard's index (i.e. IoU)
 
 Finally, I evaluated and stitched together predicted images back into large satellite images.
 
+![img.png](assets/img.png)
+
+(Note: some missing patches in the image were used for training).
+
 Shadows and clouds are probably the biggest obstacle for precise counting. While augmentations can help to some extent,
 ideally multiple images of the same solar farm should be obtained and combined for thorough coverage.
 
-The following are some notable examples,
+The following are some notable examples.
 
 Handling multiple classes: 
 
