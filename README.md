@@ -78,8 +78,12 @@ And here are the common failures, mostly shades and clouds:
 
 # Future work
 
-Future work includes evaluating number of solar panels (we know that pixel resolution is 50cm/pixel). 
-The panels have about 40 inches (101.6 cm, or 2 pixel) width.
+Augmentation is by no means thoroughly explored and one can explore more of it. This could improve detection is shadowed 
+areas. In addition, shape of the solar panels is distinct (long, rectangular) and some post-processing can be applied 
+to remove noise.
+
+Once could evaluate number of solar panels as means of tracking the progress of solar farm construction. 
+We know that pixel resolution is 50cm/pixel, the panels have about 40 inches (101.6 cm, or 2 pixel) width.
 
 Small edge improvements can be done by allowing for some overlap when cropping large images. 
-Once segmentation is done we can combine the masks and the edge effect should disappear.
+Once segmentation is done we can combine the masks and the edge effect will disappear.
