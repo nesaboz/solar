@@ -8,19 +8,37 @@ yes | conda install -c conda-forge jupyter_contrib_nbextensions graphviz python-
 Goal of this project is to deliver segmentation masks of solar panel farms 
 using satellite images. Due to large varieties of the images, I decided to use deep segmentation/PyTorch. 
 
-Data preparation/cleaning was intensive. Most labels were provided thought quality was not ideal. Nevertheless were greatful 
-for what seems to have been a painstaking labeling job (I generated some labels using [LabelMe](https://github.com/wkentaro/labelme)).
+# Data 
 
-I first split several large (1GB) satellite images into smaller ones. 
+Data preparation/cleaning was intensive. Most labels were provided thought quality was not ideal. Nevertheless, I was grateful 
+for what seems to have been a painful labeling job. I also generated some labels using [LabelMe](https://github.com/wkentaro/labelme)). 
+I first split several large (1GB) satellite images into smaller ones. There were 449 labels of 3 classes: racks, common panels, and dense panels:
+![label1.png](assets/label1.png)
+![label2.png](assets/label2.png)
+![label3.png](assets/label3.png)
+
+# Augmentation
+
 It was insightful to plot mean and standard deviation of labeled and unlabeled images to identified range for 
-ColorJitter as augmentation.
+ColorJitter as augmentation:
+![normalization.png](assets/normalization.png)
 
-I used Adam optimizer and weighed CrossEntropyLoss. Segmentation was based on UNet arhitecture.
+Labeled and unlabeled data have decent overlap, with non-covered datapoints typically being clouds 
+(high mean, low stdev) owith r partial out-of-bounds (i.e. black) zones (low mean). 
+See main_experimentation.py for examples. 
+
+# Training
+
+I used Adam optimizer and weighed CrossEntropyLoss. Segmentation was based on UNet arhitecture (see models.py):
 
 ![losses.png](assets/losses.png)
-Achieved 71% jaccard's index (i.e. IoU)
 
-Finally, I evaluated and stitched together predicted images back into large satellite images.
+Training for 120 epoch took about 6 minutes (RTX5000). Achieved 71% Jaccard index (aka IoU) on validation dataset.
+
+# Inference
+
+Finally, I evaluated and stitched together predicted images back into large satellite images (size ~1Gb, 
+showing here only smaller section):
 
 ![img.png](assets/img.png)
 

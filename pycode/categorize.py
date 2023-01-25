@@ -17,7 +17,7 @@ MyImageType = TypeVar('MyImageType', str, Path, PIL.Image.Image, numpy.array)
 
 from constants import ROOT
 
-LABELS = Path(ROOT) / 'data/all_labels'
+LABELS = Path(ROOT) / 'data'
 
 
 def load_image(im: MyImageType) -> numpy.array:
@@ -31,7 +31,7 @@ def load_image(im: MyImageType) -> numpy.array:
     return im
 
 
-def show_image(im: MyImageType, title: str = None, prompt=True) -> str:
+def show_image(im: MyImageType, title: str = None, prompt=True, filter_fn=None) -> str:
     """
     Load and show (or not) image using cv2. Couldn't find neither for PIL show() nor plt.imshow() how to reuse
     the same figure. This works in cv2 by simply giving the same window name.
@@ -40,6 +40,9 @@ def show_image(im: MyImageType, title: str = None, prompt=True) -> str:
         print('Image is shown on desktop.')
         print('Press any button to close.')
     im = load_image(im)
+    # filter image
+    if filter_fn:
+        im = filter_fn(im)
     cv2.imshow(title if title else 'pic-display', im)
     key_pressed = chr(cv2.waitKey(0))  # 0 to wait for user input, >0 for milliseconds to wait
     return key_pressed
@@ -265,18 +268,24 @@ def rename_all_files(label_type, old_name, new_name):
     print(f'Renamed {counter} files.')
 
 
+def swap(im, dim1, dim2):
+    im[:, :, dim1], im[:, :, dim2] = im[:, :, dim2], im[:, :, dim1]
+    return im
+
+
 def test_show_images():
-    label_type = 'labeled_data'
+    label_type = 'labeled'
     image_paths, mask_paths = load_paths(label_type)
-    idx = 10
+    idx = 160
     im = image_paths[idx]
     mask = mask_paths[idx]
-    show_image(im, 'image')
-    show_images(image_paths[:4], 'images')
-    show_image(overlay_two_images(im, mask), 'overlay')
-    show_image(concat_images(im, mask), 'concatenated')
-    show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'concatenated')
-    show_image(overlay_two_images(im, mask, False), 'overlayed')
+    # show_image(im, 'image')
+    show_image(mask, ',mask', filter_fn=lambda x: swap(x, 1, 0))
+    # show_images(image_paths[:4], 'images')
+    # show_image(overlay_two_images(im, mask), 'overlay')
+    # show_image(concat_images(im, mask), 'concatenated')
+    # show_image(concat_n_images([im, mask, overlay_two_images(im, mask)]), 'concatenated')
+    # show_image(overlay_two_images(im, mask, False), 'overlayed')
 
 
 if __name__ == '__main__':

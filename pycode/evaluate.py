@@ -1,69 +1,36 @@
-import numpy as np
-import random
 from pathlib import Path
-from tqdm import tqdm
-import torch
-torch.manual_seed(10)
-import torch.optim as optim
-import torch.nn as nn
-import platform
-import matplotlib.ticker as ticker
 
-from PIL import Image
-from PIL.ImageStat import Stat
-import datetime
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from torch.utils.data import DataLoader, Dataset, random_split, WeightedRandomSampler, SubsetRandomSampler
-from torchvision.transforms import Compose, ToTensor, Normalize, RandomApply, ColorJitter, ToPILImage
-import ipyplot
-from torchmetrics import JaccardIndex
-from torchmetrics.functional import jaccard_index
-from processing import BigImage, prep_data
-import datetime
-import json
-from constants import ROOT, RUNS_FOLDER
-from processing import TransformedTensorDataset
-
-
-from step_by_step import StepByStep, InverseNormalize, load_tensor, get_means_and_stdevs
-from categorize import check_for_missing_files, LABELS, show_image, overlay_two_images
-from models import Segnet
-from pathlib import Path
-
-import PIL
+import matplotlib.ticker as ticker
 import numpy as np
-import pandas as pd
-import torch
 from PIL import Image
+from torch.utils.data import DataLoader
+from torchvision.transforms import ToPILImage
 from tqdm import tqdm
 
-from PIL import Image
-from torch.utils.data import DataLoader, Dataset, random_split
-from torchvision.transforms import Compose, ToTensor
-from constants import ROOT
-
-from step_by_step import StepByStep
-from categorize import check_for_missing_files
+from categorize import overlay_two_images
+from processing import BigImage
+from processing import TransformedTensorDataset
+from step_by_step import InverseNormalize
 
 
 def convert_class_mask_to_rgb_image(im, n_classes):
     """
-    im is of shape (h, w) with each pixels being assigned one of the values in (0, n_clases-1) range.
-    We want to convert classes to colors, like 0 to black, 1 to red, 2 to green, 3 to blue, 4 to yellow.
+    im is of shape (h, w) with each pixel being assigned one of the values in (0, n_clases-1) range.
+    We want to convert classes to colors.
     
     """
     h, w = im.shape
     b = np.zeros([h, w, 3], dtype='uint8')
     for class_id in range(1, n_classes):
         if class_id == 1:
-            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to red, 
+            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # convert racks to red
         elif class_id == 2:
-            b[:, :, 1] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to green, 
+            b[:, :, 1] += np.array((im == class_id) * 255, dtype='uint8')   # convert common panel to green
         elif class_id == 3:
-            b[:, :, 2] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to blue, 
-        elif class_id == 4:
-            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # this is True/False, we want all that is True to convert to yellow,
+            b[:, :, 2] += np.array((im == class_id) * 255, dtype='uint8')   # convert dense panel to  blue
+        elif class_id == 4:  # not used
+            b[:, :, 0] += np.array((im == class_id) * 255, dtype='uint8')   # in case of an extra class to yellow
             b[:, :, 1] += np.array((im == class_id) * 255, dtype='uint8')
     return b
 
@@ -130,7 +97,7 @@ def evaluate_unlabeled(unlabeled_tensor_x, unlabeled_tensor_y, val_composer, n_c
         batch_idx += 1
 
     print('Stitching ... ')
-    for tag in ['R1C1','R1C2','R2C1','R2C2']:
+    for tag in ['R1C1', 'R1C2', 'R2C1', 'R2C2']:
         big_image = BigImage(tag)
 
         big_image.stitch_images(run_folder / 'predicted',

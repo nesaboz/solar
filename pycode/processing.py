@@ -215,7 +215,7 @@ def test_stitch_images():
     big_image.stitch_images(big_image.image_dirname / 'cropped')
 
 
-def _get_tensors(image_paths, mask_paths, title_mapping):
+def get_tensors(image_paths, mask_paths, title_mapping):
     n_channels, h, w = ToTensor()(Image.open(image_paths[0]).convert('RGB')).shape
 
     x_tensor = torch.zeros([len(image_paths), n_channels, h, w])
@@ -258,33 +258,21 @@ def _get_tensors(image_paths, mask_paths, title_mapping):
     return x_tensor, y_tensor
 
 
-
-def get_labeled_tensors(data_dir, title_mapping):
-
+def get_image_paths(data_dir, title_mapping):
     labeled_imgs_dir = data_dir / 'labeled/imgs'
     labeled_masks_dir = data_dir / 'labeled/masks'
-
     image_paths = labeled_imgs_dir.glob('*.png')
     mask_paths = labeled_masks_dir.glob('*.png')
-
     # some weird bug where linux finds extra files that start with '.'
     image_paths = filter(lambda x: x.name[0] != '.', image_paths)
     mask_paths = filter(lambda x: x.name[0] != '.', mask_paths)
-    
     names = title_mapping.keys()
     image_paths = [image_path for image_path in image_paths if any([name in image_path.name for name in names])]
     mask_paths = [mask_path for mask_path in mask_paths if any([name in mask_path.name for name in names])]
-
     image_paths = sorted(list(image_paths))
     mask_paths = sorted(list(mask_paths))
-    
     labeled_idx_map = {i: image_path.name for i, image_path in enumerate(image_paths)}
-    
-    check_for_missing_files(image_paths, mask_paths)
-    
-    labeled_tensor_x, labeled_tensor_y = _get_tensors(image_paths, mask_paths, title_mapping)
-
-    return labeled_tensor_x, labeled_tensor_y, labeled_idx_map
+    return image_paths, mask_paths, labeled_idx_map
 
 
 class TransformedTensorDataset(Dataset):
@@ -335,13 +323,13 @@ def get_unlabeled_tensors(data_dir, shape, filter_fn=None):
     return unlabeled_tensor_x, unlabeled_tensor_y, unlabeled_idx_map
 
 
-def prep_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map, applier, n_classes, batch_size=32):
-    
+def split_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map):
     torch.manual_seed(13)
     N = len(labeled_tensor_x)
     n_train = int(.85 * N)
     n_val = N - n_train
-    train_subset, val_subset = random_split(TransformedTensorDataset(labeled_tensor_x, labeled_tensor_y), [n_train, n_val])
+    train_subset, val_subset = random_split(TransformedTensorDataset(labeled_tensor_x, labeled_tensor_y),
+                                            [n_train, n_val])
 
     train_idx = train_subset.indices
     val_idx = val_subset.indices
@@ -350,8 +338,14 @@ def prep_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map, applier, n_cl
     train_tensor_y = labeled_tensor_y[train_idx]
     val_tensor_x = labeled_tensor_x[val_idx]
     val_tensor_y = labeled_tensor_y[val_idx]
-    
+
     val_idx_map = {i: labeled_idx_map[idx] for i, idx in enumerate(val_idx)}
+
+    return train_tensor_x, train_tensor_y, val_tensor_x, val_tensor_y, val_idx_map
+
+def prep_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map, applier, n_classes, batch_size=32):
+
+    train_tensor_x, train_tensor_y, val_tensor_x, val_tensor_y, val_idx_map = split_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map)
 
     torch.manual_seed(13)
     temp_train_dataset = TransformedTensorDataset(train_tensor_x, train_tensor_y, transform=applier)
@@ -369,7 +363,7 @@ def prep_data(labeled_tensor_x, labeled_tensor_y, labeled_idx_map, applier, n_cl
     
     weights = get_weights(train_tensor_y, n_classes)
 
-    return train_loader, val_loader, val_idx_map, normalizer, val_composer, weights
+    return train_loader, val_loader, val_idx_map, normalizer, train_composer, val_composer, weights
 
 
 if __name__ == '__main__':
