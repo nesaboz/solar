@@ -11,8 +11,10 @@ using satellite images. Due to large varieties of the images, I decided to use d
 # Data 
 
 Data preparation/cleaning was intensive. Most labels were provided thought quality was not ideal. Nevertheless, I was grateful 
-for what seems to have been a painful labeling job. I also generated some labels using [LabelMe](https://github.com/wkentaro/labelme)). 
-I first split several large (1GB) satellite images into smaller ones. There were 449 labels of 3 classes: racks, common panels, and dense panels:
+for what seems to have been a painful labeling job. I also generated some labels using [LabelMe](https://github.com/wkentaro/labelme). 
+I first split several large (~1GB) satellite images into smaller ones (256x256 size). 
+There were 449 labels of 3 classes: racks, common panels, and dense panels:
+
 ![label1.png](assets/label1.png)
 ![label2.png](assets/label2.png)
 ![label3.png](assets/label3.png)
@@ -24,12 +26,12 @@ ColorJitter as augmentation:
 ![normalization.png](assets/normalization.png)
 
 Labeled and unlabeled data have decent overlap, with non-covered datapoints typically being clouds 
-(high mean, low stdev) owith r partial out-of-bounds (i.e. black) zones (low mean). 
-See main_experimentation.py for examples. 
+(high mean, low stdev) or with partial out-of-bounds, i.e. black, zones (low mean). 
+See `main_experimentation.py` for examples. 
 
 # Training
 
-I used Adam optimizer and weighed CrossEntropyLoss. Segmentation was based on UNet arhitecture (see models.py):
+I used `Adam` optimizer and weighed `CrossEntropyLoss`. Segmentation was based on modified UNet arhitecture (see models.py):
 
 ![losses.png](assets/losses.png)
 
@@ -44,7 +46,7 @@ showing here only smaller section):
 
 (Note: some missing patches in the image were used for training).
 
-Shadows and clouds are probably the biggest obstacle for precise counting. While augmentations can help to some extent,
+**Shadows and clouds are probably the biggest obstacle for precise counting**. While augmentations can help to some extent,
 ideally multiple images of the same solar farm should be obtained and combined for thorough coverage.
 
 The following are some notable examples.
@@ -64,7 +66,7 @@ Handling different backgrounds:
 ![img_10.png](assets/img_10.png) 
  
 
-And here are the common failures namely shades and clouds:
+And here are the common failures, mostly shades and clouds:
 
 ![img_9.png](assets/img_9.png) 
 ![img_11.png](assets/img_11.png)
@@ -77,6 +79,7 @@ And here are the common failures namely shades and clouds:
 # Future work
 
 Future work includes evaluating number of solar panels (we know that pixel resolution is 50cm/pixel). 
-The modules used on the Samson project are LONGi-LR4 and LONGi-LR6 which have about 40 inches (101.6 cm) width.
+The panels have about 40 inches (101.6 cm, or 2 pixel) width.
+
 Small edge improvements can be done by allowing for some overlap when cropping large images. 
 Once segmentation is done we can combine the masks and the edge effect should disappear.
