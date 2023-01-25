@@ -1,10 +1,5 @@
 Repo: solar
 
-```
-pip install -U torch numpy pandas matplotlib torchviz scikit-learn tensorboard torchvision tqdm torch-lr-finder ipyplot ipywidgets opencv-python torchmetrics
-yes | conda install -c conda-forge jupyter_contrib_nbextensions graphviz python-graphviz
-```
-
 Goal of this project is to deliver segmentation masks of solar panel farms 
 using satellite images. Due to large varieties of the images, I decided to use deep segmentation/PyTorch. 
 
