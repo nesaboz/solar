@@ -1,2 +1,0 @@
-pip install -U torch numpy pandas matplotlib torchviz scikit-learn tensorboard torchvision tqdm torch-lr-finder ipyplot ipywidgets opencv-python torchmetrics
-yes | conda install -c conda-forge jupyter_contrib_nbextensions graphviz python-graphviz
