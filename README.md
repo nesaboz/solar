@@ -84,3 +84,7 @@ We know that pixel resolution is 50cm/pixel, the panels have about 40 inches (10
 
 Small edge improvements can be done by allowing for some overlap when cropping large images. 
 Once segmentation is done we can combine the masks and the edge effect will disappear.
+
+
+References:
+Boiler-plate code based on a [book]((https://pytorchstepbystep.com/)) "PyTorch: Step by Step " by Daniel Voigt Godoy.

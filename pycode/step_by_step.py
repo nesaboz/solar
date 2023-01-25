@@ -2,17 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from PIL import Image
 import datetime
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms import Normalize, ToTensor
+from torchvision.transforms import Normalize
 import random
 from tqdm import tqdm
 from copy import deepcopy
 from torch.optim.lr_scheduler import LambdaLR
 import torch.optim as optim
-from torchviz import make_dot
-from torch.utils.data import TensorDataset
 from functools import partial
 
 
@@ -724,108 +721,6 @@ class StepByStep(object):
                 current_lr = list(map(lambda d: d['lr'], self.scheduler.optimizer.state_dict()['param_groups']))
                 self.learning_rates.append(current_lr)
 
-    def print_trainable_parameters(self):
-        print_trainable_parameters(self.model)
-
-    def make_dot(self):
-        x, y = next(iter(self.val_loader))
-
-        self.model.eval()
-        x = x.to(self.device)
-        output = self.model(x)
-        dot = make_dot(output)
-        dot.render('inception')
-
-
-def preprocessed_dataset(model, loader, device=None):
-    """
-    Runs all data in the loader through the model and returns a dataset.
-    """
-
-    features = torch.Tensor()
-    labels = torch.Tensor().type(torch.long)
-
-    if device is None:
-        device = next(model.parameters()).device
-
-    for i, (x_batch, y_batch) in enumerate(loader):
-        model.eval()
-        output = model(x_batch.to(device))
-        features = torch.cat([features, output.detach().cpu()])
-        labels = torch.cat([labels, y_batch.cpu()])
-
-    return TensorDataset(features, labels)
-
-
-def unfreeze_model(model):
-    for parameter in model.parameters():
-        parameter.requires_grad = True
-
-
-def freeze_model(model):
-    for parameter in model.parameters():
-        parameter.requires_grad = False
-
-
-def print_trainable_parameters(model):
-    names = [name for name, param in model.named_parameters() if param.requires_grad]
-    if names:
-        print("\n".join(names))
-    else:
-        print('No trainable parameters.')
-
-
-def compare_optimizers(model, loss_fn, optimizers, train_loader, val_loader=None, schedulers=None, layers_to_hook='', n_epochs=50):
-    results = {}
-    model_state = deepcopy(model).state_dict()
-
-    for desc, opt in optimizers.items():
-        model.load_state_dict(model_state)
-
-        optimizer = opt['class'](model.parameters(), **opt['parms'])
-
-        sbs = StepByStep(model, loss_fn, optimizer)
-        sbs.set_loaders(train_loader, val_loader)
-
-        try:
-            if schedulers is not None:
-                sched = schedulers[desc]
-                scheduler = sched['class'](optimizer, **sched['parms'])
-                sbs.set_lr_scheduler(scheduler)
-        except KeyError:
-            pass
-
-        sbs.capture_parameters(layers_to_hook)
-        sbs.capture_gradients(layers_to_hook)
-        sbs.train(n_epochs)
-        sbs.remove_hooks()
-
-        parms = deepcopy(sbs._parameters)
-        grads = deepcopy(sbs._gradients)
-
-        lrs = sbs.learning_rates[:]
-        if not len(lrs):
-            lrs = [list(map(lambda p: p['lr'], optimizer.state_dict()['param_groups']))] * n_epochs
-
-        results.update({desc: {'parms': parms,
-                               'grads': grads,
-                               'losses': np.array(sbs.losses),
-                               'val_losses': np.array(sbs.val_losses),
-                               'state': optimizer.state_dict(),
-                               'lrs': lrs}})
-
-    return results
-
-
-def load_tensor(paths, n_channels, transform, squeeze=True):
-    h, w = Image.open(paths[0]).size
-    tensor = torch.zeros([len(paths), n_channels, h, w])
-    for i, path in enumerate(tqdm(paths)):
-        img = Image.open(path)
-        tensor[i, :, :, :] = transform(img)
-    if squeeze:
-        tensor = tensor.squeeze()
-    return tensor
 
 
 class InverseNormalize(Normalize):
@@ -842,20 +737,3 @@ class InverseNormalize(Normalize):
 
     def __call__(self, tensor):
         return super().__call__(tensor.clone())
-
-
-def rescale(x):
-    """
-    Rescale tensor. Don't have use case yet.
-
-    Args:
-        x:
-
-    Returns:
-
-    """
-    rescaled_x = torch.clone(x)
-    for i in range(x.shape[0]):
-        rescaled_x[i,:,:] = rescaled_x[i,:,:] - rescaled_x[i,:,:].min()
-        rescaled_x[i,:,:] = rescaled_x[i,:,:] / rescaled_x[i,:,:].max()
-    return rescaled_x
