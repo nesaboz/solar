@@ -10,8 +10,9 @@ using satellite images. Due to large varieties of the images, I decided to use d
 
 # Data 
 
-Data preparation/cleaning was intensive. Most labels were provided thought quality was not ideal. Nevertheless, I was grateful 
-for what seems to have been a painful labeling job. I also generated some labels using [LabelMe](https://github.com/wkentaro/labelme). 
+Data preparation/cleaning was intensive. Most labels were provided thought quality was not ideal. Nevertheless, 
+I am grateful for what seems to have been a painful labeling job. I also generated some labels 
+using [LabelMe](https://github.com/wkentaro/labelme). 
 I first split several large (~1GB) satellite images into smaller ones (256x256 size). 
 There were 449 labels of 3 classes: racks, common panels, and dense panels:
 
@@ -31,7 +32,8 @@ See `main_experimentation.py` for examples.
 
 # Training
 
-I used `Adam` optimizer and weighed `CrossEntropyLoss`. Segmentation was based on modified UNet arhitecture (see models.py):
+I used `Adam` optimizer and weighed `CrossEntropyLoss`. Segmentation was based on UNet-like arhitecture 
+and [this](https://arxiv.org/abs/1505.04366) paper (see models.py):
 
 ![losses.png](assets/losses.png)
 
