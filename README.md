@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This study leverages deep learning for segmenting solar panels in satellite imagery to enable tracking of installation process on large solar farms. Various augmentation techiques (ColorJitter) were evaluated to combat infuence of clouds and shadows in the images. A custom segmentation ResNet-based model was developed in PyTorch, to achieved 71% Jaccard index (aka IoU) on a validation dataset. [GitHub repo](https://github.com/nesaboz/solar).
+This study leverages deep learning for segmenting solar panels in satellite imagery to enable tracking of installation process on large solar farms. A custom segmentation ResNet-based model was developed in PyTorch, to achieved 71% Jaccard index (aka IoU) on a validation dataset. ColorJitter was shown to be a good augmentation to combat influence of clouds and shadows in the images. [GitHub repo](https://github.com/nesaboz/solar).
 
 ## Data 
 
@@ -25,7 +25,7 @@ See `main_experimentation.py` for examples.
 
 ## Training
 
-I used `Adam` optimizer and weighed `CrossEntropyLoss`. Segmentation was based on UNet-like arhitecture 
+I used `Adam` optimizer and weighed `CrossEntropyLoss`. Segmentation was based on UNet-like architecture 
 and [this](https://arxiv.org/abs/1505.04366) paper (see models.py):
 
 ![losses.png](assets/losses.png)
